@@ -9,6 +9,7 @@ using namespace skybolt::refl;
 struct RegistrationTestClass
 {
 	int a;
+	bool operator==(const RegistrationTestClass&) const = default;
 };
 
 SKYBOLT_REFLECT(RegistrationTestClass) {
@@ -52,4 +53,32 @@ TEST_CASE("Type that type can be registered after the type that refers to it")
 	TypeReferringToAnotherType object;
 	Instance value = property->getValue(makeRefInstance(registry, &object));
 	CHECK(value.getType()->getName() == "OtherClassCustomName");
+}
+
+TEST_CASE("Create default instance of default-constructible type")
+{
+	TypeRegistry registry;
+	TypePtr type = registry.getOrCreateType<RegistrationTestClass>();
+	REQUIRE(type);
+
+	std::unique_ptr<Instance> instance = type->createDefaultInstance();
+	REQUIRE(instance != nullptr);
+	RegistrationTestClass defaultValue{};
+	CHECK(instance->cast<RegistrationTestClass>() == defaultValue);
+}
+
+TEST_CASE("Create default instance of non-default-constructible type returns null")
+{
+	struct NonDefaultConstructible
+	{
+		NonDefaultConstructible() = delete;
+		NonDefaultConstructible(int) {}
+	};
+
+	TypeRegistry registry;
+	TypePtr type = registry.getOrCreateType<NonDefaultConstructible>();
+	REQUIRE(type);
+
+	std::unique_ptr<Instance> instance = type->createDefaultInstance();
+	CHECK(instance == nullptr);
 }

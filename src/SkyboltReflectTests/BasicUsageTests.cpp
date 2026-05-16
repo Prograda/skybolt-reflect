@@ -23,6 +23,7 @@ TEST_CASE("Get and set class member properties")
     TypeRegistry registry;
 
     auto type = registry.getTypeByName("Vec2");
+	REQUIRE(type);
     auto property = type->getProperty("x");
 
     Vec2 v{1.f, 2.f};

@@ -40,14 +40,18 @@ struct ContainerValueAccessor
 
 using ContainerValueAccessorPtr = std::shared_ptr<ContainerValueAccessor>;
 
-class Type
+class Type : public std::enable_shared_from_this<Type>
 {
 public:
-	//! @param containerValueAccessor specifies an interface for accessing values if type is a container, otherwise null if type is a simple value.
-	Type(const std::string& name, const std::type_index& typeIndex, ContainerValueAccessorPtr containerValueAccessor = nullptr) :
+	using ValueFactory = std::function<std::shared_ptr<void>()>;
+
+	//! @param containerValueAccessor is an interface for accessing values if type is a container, otherwise null if type is a simple value.
+	//! @param valueFactory is an optional factory to create a default instance value of the type; if null, functionality needing the ability to create new instances by reflection will be disabled.
+	Type(const std::string& name, const std::type_index& typeIndex, ContainerValueAccessorPtr containerValueAccessor = nullptr, ValueFactory valueFactory = nullptr) :
 		mName(name),
 		mTypeIndex(typeIndex),
-		mContainerValueAccessor(containerValueAccessor)
+		mContainerValueAccessor(containerValueAccessor),
+		mValueFactory(std::move(valueFactory))
 	{
 	}
 
@@ -81,6 +85,10 @@ public:
 		return false;
 	}
 
+	//! Creates a default-constructed owning instance of the underlying type.
+	//! @returns null if the type is not default constructible.
+	std::unique_ptr<Instance> createDefaultInstance() const;
+
 	const std::string& getName() const { return mName; }
 	const std::type_index& getTypeIndex() const { return mTypeIndex; }
 
@@ -90,6 +98,7 @@ private:
 	std::string mName;
 	std::type_index mTypeIndex;
 	ContainerValueAccessorPtr mContainerValueAccessor; //!< Can be null
+	ValueFactory mValueFactory; //!< null if instances are not constructible by the reflection system
 	PropertyMap mProperties;
 	std::map<std::type_index, std::pair<TypePtr, std::ptrdiff_t>> mSuperTypes;
 };
@@ -242,6 +251,18 @@ ContainerValueAccessorPtr createContainerValueAccessor(TypeRegistry& registry)
     return ContainerValueAccessorFactory<std::decay_t<T>>::create(registry);
 }
 
+template <typename T>
+inline TypePtr createTypeForClass(TypeRegistry& registry, const std::string& name, const std::type_index& typeIndex)
+{
+	Type::ValueFactory factory = nullptr;
+	if constexpr (std::is_default_constructible_v<T>)
+	{
+		factory = []() { return std::make_shared<T>(); };
+	}
+
+	return std::make_shared<Type>(name, typeIndex, createContainerValueAccessor<T>(registry), std::move(factory));
+}
+
 class TypeRegistry
 {
 public:
@@ -288,7 +309,14 @@ public:
 		{
 			return t;
 		}
-		auto type = std::make_shared<Type>(index.name(), index, createContainerValueAccessor<T>(*this));
+
+		Type::ValueFactory factory = nullptr;
+		if constexpr (std::is_default_constructible_v<T>)
+		{
+			factory = []() { return std::make_shared<T>(); };
+		}
+
+		auto type = createTypeForClass<T>(*this, index.name(), index);
 		addType(type);
 		return type;
 	}
@@ -345,6 +373,15 @@ template <typename T>
 Instance makeValueInstance(TypeRegistry& registry, T object)
 {
 	return Instance(std::make_shared<T>(std::move(object)), registry.getOrCreateType<T>());
+}
+
+inline std::unique_ptr<Instance> Type::createDefaultInstance() const
+{
+	if (mValueFactory)
+	{
+		return std::make_unique<Instance>(mValueFactory(), const_cast<Type*>(this)->shared_from_this());
+	}
+	return nullptr;
 }
 
 class Property
@@ -676,7 +713,7 @@ public:
 		return *this;
 	}
 
-	//! Read only property backed by getter method
+	//! Read only property backed by a getter method
 	template <typename MethodT>
 	TypeBuilder<TypeT>& propertyReadOnly(const std::string& name, MethodT (TypeT::*getter)() const, Property::MetadataMap metadata = {})
 	{
@@ -756,8 +793,7 @@ public:
 	TypeBuilder<T> type(const std::string& name)
 	{
 		assert(mRegistry.getType<T>() == nullptr);
-		std::type_index typeIndex = typeid(T);
-		auto newType = std::make_shared<Type>(name, typeIndex);
+		TypePtr newType = createTypeForClass<T>(mRegistry, name, typeid(T));
 		mRegistry.addType(newType);
 		auto typeBuilder = TypeBuilder<T>(newType, mRegisterLater);
 		return typeBuilder;
