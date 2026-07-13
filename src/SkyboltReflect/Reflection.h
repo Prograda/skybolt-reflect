@@ -409,6 +409,7 @@ public:
 	void addMetadata(const MetadataMap& metadata);
 	void addMetadata(const std::string& name, const std::any& value);
 	std::any getMetadata(const std::string& name) const;
+	const MetadataMap& getMetadataMap() const { return mMetadata; }
 
 	void setCategory(const std::string& category) { mCategory = category; }
 	const std::string& getCategory() { return mCategory; }
