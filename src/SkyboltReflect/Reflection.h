@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "TypeId.h"
+
 #include <any>
 #include <assert.h>
 #include <functional>
@@ -13,7 +15,6 @@
 #include <string>
 #include <variant>
 #include <vector>
-#include <typeindex>
 
 namespace skybolt::refl {
 
@@ -47,7 +48,7 @@ public:
 
 	//! @param containerValueAccessor is an interface for accessing values if type is a container, otherwise null if type is a simple value.
 	//! @param valueFactory is an optional factory to create a default instance value of the type; if null, functionality needing the ability to create new instances by reflection will be disabled.
-	Type(const std::string& name, const std::type_index& typeIndex, ContainerValueAccessorPtr containerValueAccessor = nullptr, ValueFactory valueFactory = nullptr) :
+	Type(const std::string& name, const type_index& typeIndex, ContainerValueAccessorPtr containerValueAccessor = nullptr, ValueFactory valueFactory = nullptr) :
 		mName(name),
 		mTypeIndex(typeIndex),
 		mContainerValueAccessor(containerValueAccessor),
@@ -62,13 +63,13 @@ public:
 	PropertyMap getProperties() const;
 
 	void addSuperType(const TypePtr&, std::ptrdiff_t offsetFromThisToSuper);
-	std::optional<std::ptrdiff_t> getOffsetFromThisToSuper(const std::type_index& super) const;
+	std::optional<std::ptrdiff_t> getOffsetFromThisToSuper(const type_index& super) const;
 
 	template <typename T>
 	bool isDerivedFrom() const
 	{
 		// Look for direct super type
-		if (auto i = mSuperTypes.find(typeid(T)); i != mSuperTypes.end())
+		if (auto i = mSuperTypes.find(typeid_<T>()); i != mSuperTypes.end())
 		{
 			return true;
 		}
@@ -90,17 +91,17 @@ public:
 	std::unique_ptr<Instance> createDefaultInstance() const;
 
 	const std::string& getName() const { return mName; }
-	const std::type_index& getTypeIndex() const { return mTypeIndex; }
+	const type_index& getTypeIndex() const { return mTypeIndex; }
 
 	const ContainerValueAccessorPtr getContainerValueAccessor() const { return mContainerValueAccessor; } //!< Can return null
 
 private:
 	std::string mName;
-	std::type_index mTypeIndex;
+	type_index mTypeIndex;
 	ContainerValueAccessorPtr mContainerValueAccessor; //!< Can be null
 	ValueFactory mValueFactory; //!< null if instances are not constructible by the reflection system
 	PropertyMap mProperties;
-	std::map<std::type_index, std::pair<TypePtr, std::ptrdiff_t>> mSuperTypes;
+	std::map<type_index, std::pair<TypePtr, std::ptrdiff_t>> mSuperTypes;
 };
 
 template <typename T>
@@ -133,7 +134,7 @@ public:
 	template <typename T>
 	const T* tryCast() const
 	{
-		std::type_index resultTypeIndex = typeid(T);
+		type_index resultTypeIndex = typeid_<T>();
 		if (resultTypeIndex == mType->getTypeIndex()) // if result type is same type
 		{
 			return static_cast<T*>(mObjectPtr.get());
@@ -163,7 +164,7 @@ public:
 			return *result;
 		}
 
-		throw std::runtime_error("Instance::cast() could not cast from " + mType->getName() + " to " + typeid(T).name());
+		throw std::runtime_error("Instance::cast() could not cast from " + mType->getName() + " to " + typeid_<T>().name());
 	}
 
 private:
@@ -252,7 +253,7 @@ ContainerValueAccessorPtr createContainerValueAccessor(TypeRegistry& registry)
 }
 
 template <typename T>
-inline TypePtr createTypeForClass(TypeRegistry& registry, const std::string& name, const std::type_index& typeIndex)
+inline TypePtr createTypeForClass(TypeRegistry& registry, const std::string& name, const type_index& typeIndex)
 {
 	Type::ValueFactory factory = nullptr;
 	if constexpr (std::is_default_constructible_v<T>)
@@ -271,7 +272,7 @@ public:
 
 	TypePtr getTypeByName(const std::string& name) const;
 
-	TypePtr getTypeByIndex(const std::type_index& index) const
+	TypePtr getTypeByIndex(const type_index& index) const
 	{
 		if (auto i = mTypesByTypeIndex.find(index); i != mTypesByTypeIndex.end())
 		{
@@ -283,13 +284,13 @@ public:
 	template <typename T>
 	TypePtr getType() const
 	{
-		return getTypeByIndex(typeid(T));
+		return getTypeByIndex(typeid_<T>());
 	}
 
 	template <typename T>
 	TypePtr getMostDerivedType(const T& object) const
 	{
-		return getTypeByIndex(typeid(object));
+		return getTypeByIndex(typeid_(object));
 	}
 
 	template <typename T>
@@ -299,11 +300,11 @@ public:
 		{
 			return type;
 		}
-		throw std::runtime_error("Could not find type " + std::string(typeid(T).name()));
+		throw std::runtime_error("Could not find type " + std::string(typeid_<T>().name()));
 	}
 
 	template <typename T>
-	TypePtr getOrCreateType(const std::type_index& index = typeid(T))
+	TypePtr getOrCreateType(const type_index& index = typeid_<T>())
 	{
 		if (TypePtr t = getTypeByIndex(index); t)
 		{
@@ -324,12 +325,12 @@ public:
 	template <typename T>
 	TypePtr getOrCreateMostDerivedType(const T& object)
 	{
-		return getOrCreateType<T>(typeid(object));
+		return getOrCreateType<T>(typeid_(object));
 	}
 
 private:
 	std::map<std::string, TypePtr> mTypesByName;
-	std::map<std::type_index, TypePtr> mTypesByTypeIndex;
+	std::map<type_index, TypePtr> mTypesByTypeIndex;
 };
 
 template<typename ValueT>
@@ -794,7 +795,7 @@ public:
 	TypeBuilder<T> type(const std::string& name)
 	{
 		assert(mRegistry.getType<T>() == nullptr);
-		TypePtr newType = createTypeForClass<T>(mRegistry, name, typeid(T));
+		TypePtr newType = createTypeForClass<T>(mRegistry, name, typeid_<T>());
 		mRegistry.addType(newType);
 		auto typeBuilder = TypeBuilder<T>(newType, mRegisterLater);
 		return typeBuilder;
@@ -898,7 +899,7 @@ void Type::addSuperType(const TypePtr& super, std::ptrdiff_t offsetFromThisToSup
 	mSuperTypes[super->getTypeIndex()] = { super, offsetFromThisToSuper };
 }
 
-std::optional<std::ptrdiff_t> Type::getOffsetFromThisToSuper(const std::type_index& super) const
+std::optional<std::ptrdiff_t> Type::getOffsetFromThisToSuper(const type_index& super) const
 {
 	// Look for direct super types
 	if (auto i = mSuperTypes.find(super); i != mSuperTypes.end())
