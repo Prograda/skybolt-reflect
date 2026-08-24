@@ -810,6 +810,13 @@ using RegistrationHandler = std::function<void(TypeRegistryBuilder&)>;
 void addStaticRegistrationHandler(RegistrationHandler handler);
 void addStaticallyRegisteredTypes(TypeRegistry& registry);
 
+#if defined(__GNUC__) || defined(__clang__)
+    #define SKYBOLT_KEEP_SYMBOL __attribute__((used))
+#else
+	// TODO: find a good way to prevent MSVC from optimizing away the variable.
+	// Currently it seems that MSVC does not optimize away our unused inline variables, so this macro is redundant for now.
+    #define SKYBOLT_KEEP_SYMBOL
+#endif
 
 #define SKYBOLT_REFLECT(moduleName) \
 	/* Forward declare implementation */ \
@@ -830,10 +837,15 @@ void addStaticallyRegisteredTypes(TypeRegistry& registry);
 	executable. In C++, if an object is not explicitly used by main(), or in a file included by main, the
 	linker will often discard the object as "dead code". This is especially	common when modules are compiled
 	into static libraries.
-	This macro creates a "pull" mechanism to force the linker to include the registration object. */
+	This macro creates a "pull" mechanism to force the linker to include the registration object.
+	Because the C++ standard allows compilers to optimize away variables that are never used, we employ the
+	SKYBOLT_KEEP_SYMBOL macro to try to ensure the variable is not optimized away. In out testing, MSVC and GCC
+	do not optimize away the variable if it is inline, so this macro is redundant for those compilers, but that could
+	change in the future as the behavior is undefined in the C++ standard.
+	*/
 #define SKYBOLT_REFLECT_EXTERN(moduleName) \
 	extern void* const use_##moduleName; \
-	static void* const force_use_##moduleName = []() { \
+	SKYBOLT_KEEP_SYMBOL inline void* const force_use_##moduleName = []() { \
 		return use_##moduleName; \
 	}();
 
