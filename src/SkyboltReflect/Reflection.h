@@ -327,6 +327,8 @@ public:
 		return getOrCreateType<T>(typeid(object));
 	}
 
+	const std::map<std::string, TypePtr>& getTypes() const { return mTypesByName; }
+
 private:
 	std::map<std::string, TypePtr> mTypesByName;
 	std::map<std::type_index, TypePtr> mTypesByTypeIndex;
