@@ -2,7 +2,7 @@ cmake_minimum_required (VERSION 3.26.0)
 
 project(SkyboltReflect)
 
-enable_testing()
+include(CTest)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -19,10 +19,11 @@ endif()
 #-------------------------------------------------------------
 # Build tree
 #-------------------------------------------------------------
-include(Catch)
-
 add_subdirectory(src/SkyboltReflect)
-add_subdirectory(src/SkyboltReflectTests)
+
+if (BUILD_TESTING)
+	add_subdirectory(src/SkyboltReflectTests)
+endif()
 
 # Install conan files (required by 'conan editable' feature. See https://docs.conan.io/en/latest/developing_packages/editable_packages.html)
 if (EXISTS ${CMAKE_SOURCE_DIR}/conanfile.py) # File might not exist during conan build. See https://github.com/conan-io/conan/issues/5415.

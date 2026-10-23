@@ -1,8 +1,7 @@
 // Copyright (c) Prograda Pty. Ltd.
 // Licensed under the MIT license. See LICENSE file in the project root for details.
 
-#define CATCH_CONFIG_MAIN
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 #include <SkyboltReflect/Reflection.h>
 
 using namespace skybolt::refl;
